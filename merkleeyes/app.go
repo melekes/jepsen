@@ -371,18 +371,23 @@ func (app *MerkleEyesApp) doTx(tx []byte) abci.ResponseDeliverTx {
 
 		power, n := binary.Uvarint(tx)
 		if n != len(tx) {
-			return abci.ResponseDeliverTx{Code: CodeTypeEncodingError,
-				Log: "Power must be uvarint"}
+			return abci.ResponseDeliverTx{
+				Code: CodeTypeEncodingError,
+				Log:  "Power must be uvarint",
+			}
 		}
 
 		return app.updateValidator(pubKey, int64(power))
+
 	case TxTypeValSetRead:
-		b, err := json.Marshal(app.validators)
+		bz, err := json.Marshal(app.validators)
 		if err != nil {
-			return abci.ResponseDeliverTx{Code: CodeTypeInternalError,
-				Log: fmt.Sprintf("Error marshalling validator info: %v", err)}
+			return abci.ResponseDeliverTx{
+				Code: CodeTypeInternalError,
+				Log:  fmt.Sprintf("Marshaling error: %v", err),
+			}
 		}
-		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK, Data: b, Log: string(b)}
+		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK, Data: bz, Log: string(bz)}
 
 	case TxTypeValSetCAS:
 		version, n := binary.Uvarint(tx)
@@ -395,8 +400,10 @@ func (app *MerkleEyesApp) doTx(tx []byte) abci.ResponseDeliverTx {
 		// 		Log: fmt.Sprintf("Version number must be 8 bytes: remaining tx (%X) is %d bytes", tx, len(tx))}
 		// }
 		if app.validators.Version != version {
-			return abci.ResponseDeliverTx{Code: CodeTypeErrUnauthorized,
-				Log: fmt.Sprintf("Version was %d, not %d", app.validators.Version, version)}
+			return abci.ResponseDeliverTx{
+				Code: CodeTypeErrUnauthorized,
+				Log:  fmt.Sprintf("Version was %d, not %d", app.validators.Version, version),
+			}
 		}
 
 		tx = tx[n:]
@@ -406,26 +413,30 @@ func (app *MerkleEyesApp) doTx(tx []byte) abci.ResponseDeliverTx {
 			return errResp
 		}
 		if len(pubKey) != ed25519.PubKeySize {
-			return abci.ResponseDeliverTx{Code: CodeTypeEncodingError,
-				Log: fmt.Sprintf("PubKey must be %d bytes: %X is %d bytes", ed25519.PubKeySize, pubKey, len(pubKey))}
+			return abci.ResponseDeliverTx{
+				Code: CodeTypeEncodingError,
+				Log:  fmt.Sprintf("PubKey must be %d bytes: %X is %d bytes", ed25519.PubKeySize, pubKey, len(pubKey)),
+			}
 		}
 
 		tx = tx[ed25519.PubKeySize:]
 
 		power, n := binary.Uvarint(tx)
 		if n != len(tx) {
-			return abci.ResponseDeliverTx{Code: CodeTypeEncodingError,
-				Log: "Power must be uvarint"}
+			return abci.ResponseDeliverTx{
+				Code: CodeTypeEncodingError,
+				Log:  "Power must be uvarint",
+			}
 		}
 
 		return app.updateValidator(pubKey, int64(power))
 
 	default:
-		return abci.ResponseDeliverTx{Code: CodeTypeErrUnknownRequest,
-			Log: fmt.Sprintf("Unexpected Tx type byte %X", typeByte)}
+		return abci.ResponseDeliverTx{
+			Code: CodeTypeErrUnknownRequest,
+			Log:  fmt.Sprintf("Unexpected tx type byte: %X", typeByte),
+		}
 	}
-
-	return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
 }
 
 func (app *MerkleEyesApp) updateValidator(pubKey []byte, power int64) abci.ResponseDeliverTx {
@@ -433,8 +444,10 @@ func (app *MerkleEyesApp) updateValidator(pubKey []byte, power int64) abci.Respo
 	if v.Power == 0 {
 		// remove validator
 		if !app.validators.Has(v) {
-			return abci.ResponseDeliverTx{Code: CodeTypeErrUnauthorized,
-				Log: fmt.Sprintf("Cannot remove non-existent validator %v", v)}
+			return abci.ResponseDeliverTx{
+				Code: CodeTypeErrUnauthorized,
+				Log:  fmt.Sprintf("Cannot remove non-existent validator %v", v),
+			}
 		}
 		app.validators.Remove(v)
 	} else {
