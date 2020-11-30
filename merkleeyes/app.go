@@ -5,8 +5,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/cosmos/iavl"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -14,15 +12,14 @@ import (
 
 	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/libs/protoio"
 	"github.com/tendermint/tendermint/version"
 )
 
-// Transaction type bytes
 const (
+	// Transaction type bytes
 	TxTypeSet           byte = 0x01
 	TxTypeRm            byte = 0x02
 	TxTypeGet           byte = 0x03
@@ -33,7 +30,7 @@ const (
 
 	NonceLength = 12
 
-	// Additional codes.
+	// Additional error codes.
 	CodeTypeUnknownRequest        = 2
 	CodeTypeEncodingError         = 3
 	CodeTypeBadNonce              = 4
@@ -43,152 +40,39 @@ const (
 	CodeTypeErrUnauthorized       = 8
 )
 
-// Database key for merkle tree save value db values
-var eyesStateKey = []byte("merkleeyes:state")
-
 // MerkleEyesApp is a Merkle KV-store served as an ABCI app.
 type MerkleEyesApp struct {
 	abci.BaseApplication
 
-	state State
 	db    dbm.DB
-
-	height     int64
-	validators *ValidatorSetState
+	state State
 
 	changes []abci.ValidatorUpdate
 }
 
 var _ abci.Application = (*MerkleEyesApp)(nil)
 
-// MerkleEyesState contains the latest Merkle root hash.
-type MerkleEyesState struct {
-	Hash       []byte             `json:"hash"`
-	Height     int64              `json:"height"`
-	Validators *ValidatorSetState `json:"validators"`
-}
-
-// ValidatorSetState contains the validator set and its version (~ the number
-// of times it was changed).
-type ValidatorSetState struct {
-	Version    uint64       `json:"version"`
-	Validators []*Validator `json:"validators"`
-}
-
-// Validator represents a single validator.
-type Validator struct {
-	PubKey crypto.PubKey `json:"pub_key"`
-	Power  int64         `json:"power"`
-}
-
-// Has returns true if v is present in the validator set.
-func (vss *ValidatorSetState) Has(v *Validator) bool {
-	for _, v1 := range vss.Validators {
-		if v1.PubKey.Equals(v.PubKey) {
-			return true
-		}
-	}
-	return false
-}
-
-// Remove removes v from the validator set.
-func (vss *ValidatorSetState) Remove(v *Validator) {
-	vals := make([]*Validator, 0, len(vss.Validators)-1)
-	for _, v1 := range vss.Validators {
-		if v1.PubKey.Equals(v.PubKey) {
-			vals = append(vals, v1)
-		}
-	}
-	vss.Validators = vals
-}
-
-// Set updates v.
-func (vss *ValidatorSetState) Set(v *Validator) {
-	for i, v1 := range vss.Validators {
-		if v1.PubKey.Equals(v.PubKey) {
-			vss.Validators[i] = v
-			return
-		}
-	}
-	vss.Validators = append(vss.Validators, v)
-}
-
 // NewMerkleEyesApp initializes the database, loads any existing state, and
 // returns a new MerkleEyesApp.
-func NewMerkleEyesApp(dbName string, cacheSize int) *MerkleEyesApp {
-	// start at 1 so the height returned by query is for the next block, ie. the
-	// one that includes the AppHash for our current state
-	initialHeight := int64(1)
+func NewMerkleEyesApp(dbDir string, treeCacheSize int) (*MerkleEyesApp, error) {
+	const dbName = "merkleeyes"
 
-	// Non-persistent case
-	if dbName == "" {
-		tree, err := iavl.NewMutableTree(dbm.NewMemDB(), cacheSize)
-		if err != nil {
-			panic(err)
-		}
-
-		return &MerkleEyesApp{
-			state:  NewState(tree, 0),
-			db:     nil,
-			height: initialHeight,
-		}
-	}
-
-	// Setup the persistent merkle tree
-	var empty bool
-	_, err := os.Stat(filepath.Join(dbName, dbName+".db"))
-	if err != nil && os.IsNotExist(err) {
-		empty = true
-	}
-
-	// Open the db, if the db doesn't exist it will be created
-	db, err := dbm.NewGoLevelDB(dbName, dbName)
+	// Initialize a db.
+	db, err := dbm.NewGoLevelDB(dbName, dbDir)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("create db: %w", err)
 	}
 
-	// Load Tree
-	tree, err := iavl.NewMutableTree(db, cacheSize)
+	// Initialize a state.
+	state, err := NewState(db, treeCacheSize)
 	if err != nil {
-		panic(err)
-	}
-
-	if empty {
-		fmt.Println("no existing db, creating new db")
-		bz, err := json.Marshal(MerkleEyesState{
-			Hash:   tree.Hash(),
-			Height: initialHeight,
-		})
-		if err != nil {
-			panic(err)
-		}
-		db.Set(eyesStateKey, bz)
-	} else {
-		fmt.Println("loading existing db")
-	}
-
-	// Load merkle state
-	eyesStateBytes, err := db.Get(eyesStateKey)
-	if err != nil {
-		panic(err)
-	}
-	var eyesState MerkleEyesState
-	err = json.Unmarshal(eyesStateBytes, &eyesState)
-	if err != nil {
-		fmt.Println("error reading MerkleEyesState")
-		panic(err)
-	}
-
-	version, err := tree.Load()
-	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("create state: %w", err)
 	}
 
 	return &MerkleEyesApp{
-		state:      NewState(tree, version),
-		db:         db,
-		height:     eyesState.Height,
-		validators: new(ValidatorSetState),
+		state:   state,
+		db:      db,
+		changes: make([]abci.ValidatorUpdate, 0),
 	}
 }
 
@@ -204,19 +88,19 @@ func (app *MerkleEyesApp) Info(req abci.RequestInfo) abci.ResponseInfo {
 	return abci.ResponseInfo{
 		Version:          version.ABCIVersion,
 		AppVersion:       1,
-		LastBlockHeight:  app.height,
-		LastBlockAppHash: app.state.Committed().Hash(),
+		LastBlockHeight:  app.state.Height,
+		LastBlockAppHash: app.state.Hash(),
 	}
 }
 
 // InitChain implements ABCI.
 func (app *MerkleEyesApp) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	for _, v := range req.Validators {
-		app.validators.Set(&Validator{PubKey: ed25519.PubKey(v.PubKey.GetEd25519()), Power: v.Power})
+		app.state.validators.Set(&Validator{PubKey: ed25519.PubKey(v.PubKey.GetEd25519()), Power: v.Power})
 	}
 
 	return abci.ResponseInitChain{
-		AppHash: app.state.Committed().Hash(),
+		AppHash: app.state.Hash(),
 	}
 }
 
@@ -227,7 +111,7 @@ func (app *MerkleEyesApp) CheckTx(_ abci.RequestCheckTx) abci.ResponseCheckTx {
 
 // DeliverTx implements ABCI.
 func (app *MerkleEyesApp) DeliverTx(req abci.RequestDeliverTx) abci.ResponseDeliverTx {
-	tree := app.state.Working()
+	tree := app.state.Working
 	r := app.doTx(tree, req.Tx)
 	if r.IsErr() {
 		fmt.Println("DeliverTx Err", r)
@@ -265,10 +149,10 @@ func (app *MerkleEyesApp) Commit() abci.ResponseCommit {
 		if err != nil {
 			panic(err)
 		}
-		app.db.Set(eyesStateKey, bz)
+		app.db.Set(stateKey, bz)
 	}
 
-	// if app.state.Committed().Size() == 0 {
+	// if app.state.Committed.Size() == 0 {
 	// 	return abci.ResponseCommit{Data: nil}
 	// }
 	return abci.ResponseCommit{Data: hash}
@@ -279,7 +163,7 @@ func (app *MerkleEyesApp) Query(req abci.RequestQuery) (res abci.ResponseQuery) 
 	if len(req.Data) == 0 {
 		return
 	}
-	tree := app.state.Committed()
+	tree := app.state.Committed
 
 	if req.Height != 0 {
 		// TODO: support older commits
