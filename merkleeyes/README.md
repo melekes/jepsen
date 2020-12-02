@@ -91,6 +91,18 @@ Here's a session from the [abci-cli](https://docs.tendermint.com/master/app-dev/
 -> value.hex: 65726963736F6E
 ```
 
+## Build & Release
+
+If you need to release a new version of the app, modify `Version` in app.go and run:
+
+```
+$ make release
+```
+
+This will create a .tar archive inside the `./build` directory, which
+you will need to attach to the new release. It also updates the
+`merkleeyes-url` in `../tendermint/src/jepsen/tendermint/cli.clj` to point to a new file.
+
 ## Poem
 
 To the tune of Eric Clapton's "My Father's Eyes"

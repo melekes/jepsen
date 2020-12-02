@@ -2,22 +2,23 @@ package merkleeyes
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-
-	gogotypes "github.com/gogo/protobuf/types"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/libs/protoio"
 	"github.com/tendermint/tendermint/version"
 	dbm "github.com/tendermint/tm-db"
 )
 
 const (
+	// Version is the semantic version of this package.
+	Version = "0.1.0"
+
 	// Transaction type bytes
 	TxTypeSet           byte = 0x01
 	TxTypeRm            byte = 0x02
@@ -72,6 +73,7 @@ func New(dbDir string, treeCacheSize int) (*App, error) {
 		state:   state,
 		db:      db,
 		changes: make([]abci.ValidatorUpdate, 0),
+		logger:  log.NewNopLogger(),
 	}, nil
 }
 
@@ -83,6 +85,11 @@ func (app *App) SetLogger(l log.Logger) {
 // CloseDB closes the database.
 func (app *App) CloseDB() {
 	app.db.Close()
+}
+
+// ValidatorSetState returns the current ValidatorSetState.
+func (app *App) ValidatorSetState() *ValidatorSetState {
+	return app.state.Validators
 }
 
 // Info implements ABCI.
@@ -144,10 +151,6 @@ func (app *App) Commit() abci.ResponseCommit {
 	if err != nil {
 		panic(err)
 	}
-
-	// if app.state.Committed.Size() == 0 {
-	// 	return abci.ResponseCommit{Data: nil}
-	// }
 	return abci.ResponseCommit{Data: app.state.Hash()}
 }
 
@@ -237,20 +240,14 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 
 	// 1) Check nonce
 	_, n := tree.Get(nonceKey(nonce))
-	if n == nil {
+	if n != nil {
 		return abci.ResponseDeliverTx{
 			Code: CodeTypeBadNonce,
 			Log:  fmt.Sprintf("Nonce %X already exists", nonce),
 		}
 	}
 	// mark nonce as processed
-	updated := tree.Set(nonceKey(nonce), []byte{0x01})
-	if !updated {
-		return abci.ResponseDeliverTx{
-			Code: CodeTypeInternalError,
-			Log:  fmt.Sprintf("Can't mark nonce %X as processed", nonce),
-		}
-	}
+	_ = tree.Set(nonceKey(nonce), []byte{0x01})
 
 	typeByte := tx[0]
 	tx = tx[1:]
@@ -263,18 +260,12 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 			return errResp
 		}
 
-		value, errResp := unmarshalBytes(tx[len(key):], "value", true)
+		value, errResp := unmarshalBytes(tx[prefixedLen(key):], "value", true)
 		if value == nil {
 			return errResp
 		}
 
-		updated := tree.Set(storeKey(key), value)
-		if !updated {
-			return abci.ResponseDeliverTx{
-				Code: CodeTypeInternalError,
-				Log:  fmt.Sprintf("Failed to set %X to %X", key, value),
-			}
-		}
+		_ = tree.Set(storeKey(key), value)
 
 		app.logger.Info("SET", fmt.Sprintf("%X", key), fmt.Sprintf("%X", value))
 		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
@@ -317,12 +308,12 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 			return errResp
 		}
 
-		compareValue, errResp := unmarshalBytes(tx[len(key):], "compareKey", false)
+		compareValue, errResp := unmarshalBytes(tx[prefixedLen(key):], "compareKey", false)
 		if compareValue == nil {
 			return errResp
 		}
 
-		setValue, errResp := unmarshalBytes(tx[len(key)+len(compareValue):], "setValue", true)
+		setValue, errResp := unmarshalBytes(tx[prefixedLen(key)+prefixedLen(compareValue):], "setValue", true)
 		if setValue == nil {
 			return errResp
 		}
@@ -342,13 +333,7 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 			}
 		}
 
-		updated := tree.Set(storeKey(key), setValue)
-		if !updated {
-			return abci.ResponseDeliverTx{
-				Code: CodeTypeInternalError,
-				Log:  fmt.Sprintf("Failed to set %X to %X", key, setValue),
-			}
-		}
+		_ = tree.Set(storeKey(key), setValue)
 
 		app.logger.Info("CAS-SET", fmt.Sprintf("%X", key), fmt.Sprintf("%X", compareValue), fmt.Sprintf("%X", setValue))
 		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
@@ -366,7 +351,7 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 			}
 		}
 
-		tx = tx[ed25519.PubKeySize:]
+		tx = tx[prefixedLen(pubKey):]
 		// if len(tx) != 8 {
 		// 	return abci.ResponseDeliverTx{Code: CodeTypeEncodingError,
 		// 		Log: fmt.Sprintf("Power must be 8 bytes: %X is %d bytes", tx, len(tx))}
@@ -422,7 +407,7 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 			}
 		}
 
-		tx = tx[ed25519.PubKeySize:]
+		tx = tx[prefixedLen(pubKey):]
 
 		power, n := binary.Uvarint(tx)
 		if n != len(tx) {
@@ -470,22 +455,38 @@ func (app *App) updateValidator(pubKey []byte, power int64) abci.ResponseDeliver
 }
 
 func unmarshalBytes(buf []byte, key string, checkNoMoreBytes bool) ([]byte, abci.ResponseDeliverTx) {
-	var bytes gogotypes.BytesValue
-	err := protoio.UnmarshalDelimited(buf, &bytes)
-	if err != nil {
-		return nil, abci.ResponseDeliverTx{Code: CodeTypeEncodingError, Log: fmt.Sprintf("Error reading %s: %v", key, err)}
-	}
-
-	if checkNoMoreBytes {
-		if len(buf) > len(bytes.Value) {
-			return nil, abci.ResponseDeliverTx{Code: CodeTypeEncodingError, Log: "Got bytes left over"}
+	// decode length
+	// XXX: possible overflow
+	l := int(binary.BigEndian.Uint64(buf[:8]))
+	if len(buf) < l {
+		return nil, abci.ResponseDeliverTx{
+			Code: CodeTypeEncodingError,
+			Log:  fmt.Sprintf("Not enough bytes %s: %d left, wanted %d", key, len(buf), l),
 		}
 	}
 
-	return bytes.Value, abci.ResponseDeliverTx{}
+	// unmarshal bytes
+	bytes := make([]byte, l)
+	_, err := base64.StdEncoding.Decode(bytes, buf[8:(l+8)])
+	if err != nil {
+		return nil, abci.ResponseDeliverTx{Code: CodeTypeEncodingError, Log: fmt.Sprintf("Error reading %s: %v", key, err)}
+	}
+	// if n != l {
+	// 	return nil, abci.ResponseDeliverTx{Code: CodeTypeEncodingError, Log: fmt.Sprintf("Incomplete read %s: read %d, should %d", key, n, l)}
+	// }
+
+	if checkNoMoreBytes && len(buf) > 8+l {
+		return nil, abci.ResponseDeliverTx{Code: CodeTypeEncodingError, Log: "Got bytes left over"}
+	}
+
+	return bytes, abci.ResponseDeliverTx{}
 }
 
 // minimum length is 12 (nonce) + 1 (type byte) = 13
 func minTxLen() int {
 	return NonceLength + 1
+}
+
+func prefixedLen(b []byte) int {
+	return 8 + len(b)
 }

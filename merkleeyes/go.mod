@@ -8,4 +8,5 @@ require (
 	github.com/stretchr/testify v1.6.1
 	github.com/tendermint/tendermint v0.34.0
 	github.com/tendermint/tm-db v0.6.3
+	github.com/tendermint/tmlibs v0.9.0
 )
