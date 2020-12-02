@@ -36,6 +36,13 @@ func NewState(db dbm.DB, treeCacheSize int) (*State, error) {
 	}
 
 	// Get immutable version.
+	if lastVersion == 0 {
+		_, lastVersion, err = tree.SaveVersion()
+		if err != nil {
+			return nil, fmt.Errorf("save initial tree: %w", err)
+		}
+	}
+
 	iTree, err := tree.GetImmutable(lastVersion)
 	if err != nil {
 		return nil, fmt.Errorf("get immutable tree: %w", err)
