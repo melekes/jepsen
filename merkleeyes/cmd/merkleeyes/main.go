@@ -1,10 +1,11 @@
-package app
+package main
 
 import (
 	"flag"
 	"fmt"
 	"os"
 
+	merkleeyes "github.com/melekes/jepsen/merkleeyes"
 	"github.com/tendermint/tendermint/abci/server"
 	"github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
@@ -25,7 +26,7 @@ func init() {
 func main() {
 	flag.Parse()
 
-	app, err := NewMerkleEyesApp(dbDir, 0)
+	app, err := merkleeyes.New(dbDir, 0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "can't create app: %v", err)
 		os.Exit(3) // 1 and 2 are reserved (https://tldp.org/LDP/abs/html/exitcodes.html)

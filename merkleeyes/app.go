@@ -1,4 +1,4 @@
-package app
+package merkleeyes
 
 import (
 	"bytes"
@@ -39,21 +39,21 @@ const (
 	CodeTypeErrUnauthorized       = 8
 )
 
-// MerkleEyesApp is a Merkle KV-store served as an ABCI app.
-type MerkleEyesApp struct {
+// App is a Merkle KV-store served as an ABCI app.
+type App struct {
 	abci.BaseApplication
 
 	db      dbm.DB
-	state   State
+	state   *State
 	changes []abci.ValidatorUpdate
 	logger  log.Logger
 }
 
-var _ abci.Application = (*MerkleEyesApp)(nil)
+var _ abci.Application = (*App)(nil)
 
-// NewMerkleEyesApp initializes the database, loads any existing state, and
-// returns a new MerkleEyesApp.
-func NewMerkleEyesApp(dbDir string, treeCacheSize int) (*MerkleEyesApp, error) {
+// New initializes the database, loads any existing state, and returns a new
+// App.
+func New(dbDir string, treeCacheSize int) (*App, error) {
 	const dbName = "merkleeyes"
 
 	// Initialize a db.
@@ -68,25 +68,25 @@ func NewMerkleEyesApp(dbDir string, treeCacheSize int) (*MerkleEyesApp, error) {
 		return nil, fmt.Errorf("create state: %w", err)
 	}
 
-	return &MerkleEyesApp{
+	return &App{
 		state:   state,
 		db:      db,
 		changes: make([]abci.ValidatorUpdate, 0),
-	}
+	}, nil
 }
 
 // SetLogger sets a logger.
-func (app *MerkleEyesApp) SetLogger(l log.Logger) {
+func (app *App) SetLogger(l log.Logger) {
 	app.logger = l
 }
 
 // CloseDB closes the database.
-func (app *MerkleEyesApp) CloseDB() {
+func (app *App) CloseDB() {
 	app.db.Close()
 }
 
 // Info implements ABCI.
-func (app *MerkleEyesApp) Info(req abci.RequestInfo) abci.ResponseInfo {
+func (app *App) Info(req abci.RequestInfo) abci.ResponseInfo {
 	return abci.ResponseInfo{
 		Version:          version.ABCIVersion,
 		AppVersion:       1,
@@ -96,9 +96,9 @@ func (app *MerkleEyesApp) Info(req abci.RequestInfo) abci.ResponseInfo {
 }
 
 // InitChain implements ABCI.
-func (app *MerkleEyesApp) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
+func (app *App) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	for _, v := range req.Validators {
-		app.state.validators.Set(&Validator{PubKey: ed25519.PubKey(v.PubKey.GetEd25519()), Power: v.Power})
+		app.state.Validators.Set(&Validator{PubKey: ed25519.PubKey(v.PubKey.GetEd25519()), Power: v.Power})
 	}
 
 	return abci.ResponseInitChain{
@@ -107,8 +107,8 @@ func (app *MerkleEyesApp) InitChain(req abci.RequestInitChain) abci.ResponseInit
 }
 
 // CheckTx implements ABCI.
-func (app *MerkleEyesApp) CheckTx(_ abci.RequestCheckTx) abci.ResponseCheckTx {
-	if len(tx) < minTxLen() {
+func (app *App) CheckTx(req abci.RequestCheckTx) abci.ResponseCheckTx {
+	if len(req.Tx) < minTxLen() {
 		return abci.ResponseCheckTx{
 			Code: CodeTypeEncodingError,
 			Log:  fmt.Sprintf("Tx length must be at least %d", minTxLen()),
@@ -119,28 +119,28 @@ func (app *MerkleEyesApp) CheckTx(_ abci.RequestCheckTx) abci.ResponseCheckTx {
 }
 
 // DeliverTx implements ABCI.
-func (app *MerkleEyesApp) DeliverTx(req abci.RequestDeliverTx) abci.ResponseDeliverTx {
+func (app *App) DeliverTx(req abci.RequestDeliverTx) abci.ResponseDeliverTx {
 	return app.doTx(req.Tx)
 }
 
 // BeginBlock implements ABCI.
-func (app *MerkleEyesApp) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
+func (app *App) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
 	// reset valset changes
 	app.changes = make([]abci.ValidatorUpdate, 0)
 	return abci.ResponseBeginBlock{}
 }
 
 // EndBlock implements ABCI.
-func (app *MerkleEyesApp) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
+func (app *App) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
 	if len(app.changes) > 0 {
-		app.validators.Version++
+		app.state.Validators.Version++
 	}
 	return abci.ResponseEndBlock{ValidatorUpdates: app.changes}
 }
 
 // Commit implements abci.Application
-func (app *MerkleEyesApp) Commit() abci.ResponseCommit {
-	err := app.state.Commit()
+func (app *App) Commit() abci.ResponseCommit {
+	err := app.state.Commit(app.db)
 	if err != nil {
 		panic(err)
 	}
@@ -148,11 +148,11 @@ func (app *MerkleEyesApp) Commit() abci.ResponseCommit {
 	// if app.state.Committed.Size() == 0 {
 	// 	return abci.ResponseCommit{Data: nil}
 	// }
-	return abci.ResponseCommit{Data: hash}
+	return abci.ResponseCommit{Data: app.state.Hash()}
 }
 
 // Query implements ABCI.
-func (app *MerkleEyesApp) Query(req abci.RequestQuery) (res abci.ResponseQuery) {
+func (app *App) Query(req abci.RequestQuery) (res abci.ResponseQuery) {
 	tree := app.state.Committed
 
 	if req.Height != 0 {
@@ -221,7 +221,7 @@ func storeKey(key []byte) []byte {
 	return append([]byte("/key/"), key...)
 }
 
-func (app *MerkleEyesApp) doTx(tx []byte) abci.ResponseDeliverTx {
+func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 	if len(tx) < minTxLen() {
 		return abci.ResponseDeliverTx{
 			Code: CodeTypeEncodingError,
@@ -277,6 +277,7 @@ func (app *MerkleEyesApp) doTx(tx []byte) abci.ResponseDeliverTx {
 		}
 
 		app.logger.Info("SET", fmt.Sprintf("%X", key), fmt.Sprintf("%X", value))
+		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
 
 	case TxTypeRm:
 		key, errResp := unmarshalBytes(tx, "key", true)
@@ -293,6 +294,7 @@ func (app *MerkleEyesApp) doTx(tx []byte) abci.ResponseDeliverTx {
 		}
 
 		app.logger.Info("RM", fmt.Sprintf("%X", key))
+		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
 
 	case TxTypeGet:
 		key, errResp := unmarshalBytes(tx, "key", true)
@@ -349,6 +351,7 @@ func (app *MerkleEyesApp) doTx(tx []byte) abci.ResponseDeliverTx {
 		}
 
 		app.logger.Info("CAS-SET", fmt.Sprintf("%X", key), fmt.Sprintf("%X", compareValue), fmt.Sprintf("%X", setValue))
+		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
 
 	case TxTypeValSetChange:
 		pubKey, errResp := unmarshalBytes(tx, "pubKey", false)
@@ -380,7 +383,7 @@ func (app *MerkleEyesApp) doTx(tx []byte) abci.ResponseDeliverTx {
 		return app.updateValidator(pubKey, int64(power))
 
 	case TxTypeValSetRead:
-		bz, err := json.Marshal(app.validators)
+		bz, err := json.Marshal(app.state.Validators)
 		if err != nil {
 			return abci.ResponseDeliverTx{
 				Code: CodeTypeInternalError,
@@ -399,10 +402,10 @@ func (app *MerkleEyesApp) doTx(tx []byte) abci.ResponseDeliverTx {
 		// 	return abci.ResponseDeliverTx{Code: CodeTypeEncodingError,
 		// 		Log: fmt.Sprintf("Version number must be 8 bytes: remaining tx (%X) is %d bytes", tx, len(tx))}
 		// }
-		if app.validators.Version != version {
+		if app.state.Validators.Version != version {
 			return abci.ResponseDeliverTx{
 				Code: CodeTypeErrUnauthorized,
-				Log:  fmt.Sprintf("Version was %d, not %d", app.validators.Version, version),
+				Log:  fmt.Sprintf("Version was %d, not %d", app.state.Validators.Version, version),
 			}
 		}
 
@@ -439,20 +442,20 @@ func (app *MerkleEyesApp) doTx(tx []byte) abci.ResponseDeliverTx {
 	}
 }
 
-func (app *MerkleEyesApp) updateValidator(pubKey []byte, power int64) abci.ResponseDeliverTx {
+func (app *App) updateValidator(pubKey []byte, power int64) abci.ResponseDeliverTx {
 	v := &Validator{PubKey: ed25519.PubKey(pubKey), Power: power}
 	if v.Power == 0 {
 		// remove validator
-		if !app.validators.Has(v) {
+		if !app.state.Validators.Has(v) {
 			return abci.ResponseDeliverTx{
 				Code: CodeTypeErrUnauthorized,
 				Log:  fmt.Sprintf("Cannot remove non-existent validator %v", v),
 			}
 		}
-		app.validators.Remove(v)
+		app.state.Validators.Remove(v)
 	} else {
 		// add or update validator
-		app.validators.Set(v)
+		app.state.Validators.Set(v)
 	}
 
 	var pubKeyEd ed25519.PubKey

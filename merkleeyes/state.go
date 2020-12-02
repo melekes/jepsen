@@ -1,15 +1,15 @@
-package app
+package merkleeyes
 
 import (
 	"encoding/json"
 	"fmt"
 
 	"github.com/cosmos/iavl"
-	"github.com/tendermint/go-crypto"
+	"github.com/tendermint/tendermint/crypto"
 	dbm "github.com/tendermint/tm-db"
 )
 
-const stateKey = []byte("merkleeyes:state")
+var stateKey = []byte("merkleeyes:state")
 
 // State represents the app states, separating the commited state (for queries)
 // from the working state (for CheckTx and DeliverTx).
@@ -24,7 +24,7 @@ type State struct {
 }
 
 // NewState returns a new State.
-func NewState(db dbm.DB, treeCacheSize int) (State, error) {
+func NewState(db dbm.DB, treeCacheSize int) (*State, error) {
 	// Initialize a tree.
 	tree, err := iavl.NewMutableTree(db, treeCacheSize)
 	if err != nil {
@@ -47,18 +47,18 @@ func NewState(db dbm.DB, treeCacheSize int) (State, error) {
 		return nil, fmt.Errorf("load additional state: %w", err)
 	}
 
-	return State{
+	return &State{
 		Working:   tree,
 		Committed: iTree,
 
 		Height:     auxState.Height,
 		Validators: auxState.Validators,
-	}
+	}, nil
 }
 
 // Commit saves Working version and updates Committed version.
 func (s *State) Commit(db dbm.DB) error {
-	hash, version, err := s.Working.SaveVersion()
+	_, version, err := s.Working.SaveVersion()
 	if err != nil {
 		return fmt.Errorf("save tree: %w", err)
 	}
@@ -68,9 +68,6 @@ func (s *State) Commit(db dbm.DB) error {
 		return fmt.Errorf("get immutable tree: %w", err)
 	}
 	s.Committed = iTree
-
-	// Update hash.
-	s.Hash = hash
 
 	// Increment height.
 	s.Height++
