@@ -2,9 +2,9 @@ package merkleeyes
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -279,7 +279,7 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 		_, removed := tree.Remove(storeKey(key))
 		if !removed {
 			return abci.ResponseDeliverTx{
-				Code: CodeTypeInternalError,
+				Code: CodeTypeErrBaseUnknownAddress,
 				Log:  fmt.Sprintf("Failed to remove %X", key),
 			}
 		}
@@ -295,8 +295,9 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 
 		_, value := tree.Get(storeKey(key))
 		if value == nil {
-			return abci.ResponseDeliverTx{Code: CodeTypeErrBaseUnknownAddress,
-				Log: fmt.Sprintf("Cannot find key: %X", key)}
+			return abci.ResponseDeliverTx{
+				Code: CodeTypeErrBaseUnknownAddress,
+				Log:  fmt.Sprintf("Cannot find key: %X", key)}
 		}
 
 		app.logger.Info("GET", fmt.Sprintf("%X", key), fmt.Sprintf("%X", value))
@@ -352,16 +353,11 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 		}
 
 		tx = tx[prefixedLen(pubKey):]
-		// if len(tx) != 8 {
-		// 	return abci.ResponseDeliverTx{Code: CodeTypeEncodingError,
-		// 		Log: fmt.Sprintf("Power must be 8 bytes: %X is %d bytes", tx, len(tx))}
-		// }
-
-		power, n := binary.Uvarint(tx)
-		if n != len(tx) {
+		power, err := decodeInt(tx)
+		if err != nil {
 			return abci.ResponseDeliverTx{
 				Code: CodeTypeEncodingError,
-				Log:  "Power must be uvarint",
+				Log:  fmt.Sprintf("Can't decode power: %v", err),
 			}
 		}
 
@@ -378,23 +374,23 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK, Data: bz, Log: string(bz)}
 
 	case TxTypeValSetCAS:
-		version, n := binary.Uvarint(tx)
-		// if n != len(tx) {
-		// 	return abci.ResponseDeliverTx{Code: CodeTypeEncodingError,
-		// 		Log: "Power must be uvarint"}
-		// }
-		// if len(tx) < 8 {
-		// 	return abci.ResponseDeliverTx{Code: CodeTypeEncodingError,
-		// 		Log: fmt.Sprintf("Version number must be 8 bytes: remaining tx (%X) is %d bytes", tx, len(tx))}
-		// }
-		if app.state.Validators.Version != version {
+		if len(tx) < 8 {
+			return abci.ResponseDeliverTx{
+				Code: CodeTypeEncodingError,
+				Log:  "Can't decode version: not enough bytes",
+			}
+		}
+
+		version, _ := decodeInt(tx[:8])
+
+		if app.state.Validators.Version != uint64(version) {
 			return abci.ResponseDeliverTx{
 				Code: CodeTypeErrUnauthorized,
 				Log:  fmt.Sprintf("Version was %d, not %d", app.state.Validators.Version, version),
 			}
 		}
 
-		tx = tx[n:]
+		tx = tx[8:]
 
 		pubKey, errResp := unmarshalBytes(tx, "pubKey", false)
 		if pubKey == nil {
@@ -409,11 +405,11 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 
 		tx = tx[prefixedLen(pubKey):]
 
-		power, n := binary.Uvarint(tx)
-		if n != len(tx) {
+		power, err := decodeInt(tx)
+		if err != nil {
 			return abci.ResponseDeliverTx{
 				Code: CodeTypeEncodingError,
-				Log:  "Power must be uvarint",
+				Log:  fmt.Sprintf("Can't decode power: %v", err),
 			}
 		}
 
@@ -449,31 +445,43 @@ func (app *App) updateValidator(pubKey []byte, power int64) abci.ResponseDeliver
 	if err != nil {
 		panic(err)
 	}
+
+	// remove a previous change (if such exists)
+	for i, c := range app.changes {
+		if c.PubKey.Compare(pk) == 0 {
+			app.changes[len(app.changes)-1], app.changes[i] = app.changes[i], app.changes[len(app.changes)-1]
+			app.changes = app.changes[:len(app.changes)-1]
+			break
+		}
+	}
+
+	// add a change
 	app.changes = append(app.changes, abci.ValidatorUpdate{PubKey: pk, Power: power})
 
 	return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
 }
 
 func unmarshalBytes(buf []byte, key string, checkNoMoreBytes bool) ([]byte, abci.ResponseDeliverTx) {
-	// decode length
-	// XXX: possible overflow
-	l := int(binary.BigEndian.Uint64(buf[:8]))
-	if len(buf) < l {
+	if len(buf) < 8 {
 		return nil, abci.ResponseDeliverTx{
 			Code: CodeTypeEncodingError,
-			Log:  fmt.Sprintf("Not enough bytes %s: %d left, wanted %d", key, len(buf), l),
+			Log:  fmt.Sprintf("Not enough bytes %s: %d left, wanted %d", key, len(buf), 8),
+		}
+	}
+
+	// decode length
+	l, _ := decodeInt(buf[:8])
+
+	if len(buf) < 8+l {
+		return nil, abci.ResponseDeliverTx{
+			Code: CodeTypeEncodingError,
+			Log:  fmt.Sprintf("Not enough bytes %s: %d left, wanted %d", key, len(buf), 8+l),
 		}
 	}
 
 	// unmarshal bytes
 	bytes := make([]byte, l)
-	_, err := base64.StdEncoding.Decode(bytes, buf[8:(l+8)])
-	if err != nil {
-		return nil, abci.ResponseDeliverTx{Code: CodeTypeEncodingError, Log: fmt.Sprintf("Error reading %s: %v", key, err)}
-	}
-	// if n != l {
-	// 	return nil, abci.ResponseDeliverTx{Code: CodeTypeEncodingError, Log: fmt.Sprintf("Incomplete read %s: read %d, should %d", key, n, l)}
-	// }
+	copy(bytes, buf[8:(l+8)])
 
 	if checkNoMoreBytes && len(buf) > 8+l {
 		return nil, abci.ResponseDeliverTx{Code: CodeTypeEncodingError, Log: "Got bytes left over"}
@@ -489,4 +497,13 @@ func minTxLen() int {
 
 func prefixedLen(b []byte) int {
 	return 8 + len(b)
+}
+
+// XXX: - possible overflow
+//			- panics if data is not uint64
+func decodeInt(b []byte) (int, error) {
+	if len(b) < 8 {
+		return -1, errors.New("not enough bytes")
+	}
+	return int(binary.BigEndian.Uint64(b)), nil
 }
