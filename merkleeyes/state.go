@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/cosmos/iavl"
-	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 	dbm "github.com/tendermint/tm-db"
 )
 
@@ -79,8 +79,6 @@ func (s *State) Commit(db dbm.DB) error {
 	// Increment height.
 	s.Height++
 
-	// TODO: update validators.
-
 	return saveAuxState(db, auxState{
 		Height:     s.Height,
 		Validators: s.Validators,
@@ -147,8 +145,8 @@ type ValidatorSetState struct {
 
 // Validator represents a single validator.
 type Validator struct {
-	PubKey crypto.PubKey `json:"pub_key"`
-	Power  int64         `json:"power"`
+	PubKey ed25519.PubKey `json:"pub_key"`
+	Power  int64          `json:"power"`
 }
 
 // Has returns true if v is present in the validator set.
