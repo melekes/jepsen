@@ -126,7 +126,7 @@ func saveAuxState(db dbm.DB, s auxState) error {
 		return fmt.Errorf("marshal: %w", err)
 	}
 
-	err = db.Set(stateKey, bz)
+	err = db.SetSync(stateKey, bz)
 	if err != nil {
 		return fmt.Errorf("set state: %w", err)
 	}
