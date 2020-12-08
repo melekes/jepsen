@@ -54,8 +54,8 @@
          (c/exec :echo (slurp (io/resource "config.toml"))
                  :> "config/config.toml"))))
 
-(defn seeds
-  "Constructs a --seeds command line for a test, so a tendermint node knows
+(defn persistent-peers
+  "Constructs a --persistent_peers command line for a test, so a tendermint node knows
   what other nodes to talk to."
   [test node]
   (->> (:nodes test)
@@ -86,7 +86,7 @@
           :--home base-dir
           :node
           :--proxy_app socket
-          :--p2p.seeds (seeds test node))))
+          :--p2p.persistent_peers (persistent-peers test node))))
   :started)
 
 (defn start-merkleeyes!
