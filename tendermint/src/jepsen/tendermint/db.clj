@@ -26,12 +26,15 @@
     (cu/install-archive! path (str base-dir "/" app))))
 
 (defn write-validator!
-  "Writes out the given validator structure to priv_validator.json."
+  "Writes out the given validator structure to priv_validator_key.json and
+  creates empty priv_validator_state.json."
   [validator]
   (c/su
    (c/cd base-dir
          (c/exec :echo (json/generate-string validator)
                  :> "config/priv_validator_key.json")
+         (c/exec :echo (json/generate-string {})
+                 :> "data/priv_validator_state.json")
          (info "Wrote priv_validator_key.json"))))
 
 (defn write-genesis!

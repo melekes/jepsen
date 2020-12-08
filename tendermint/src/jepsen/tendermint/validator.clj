@@ -450,7 +450,7 @@
                                               first)
                                     _ (assert name)
                                     name (key name)]
-                                {:power  (:votes validator)
+                                {:power  (str (:votes validator) )
                                  :name    name
                                  :pub_key pub-key}))))})
 
