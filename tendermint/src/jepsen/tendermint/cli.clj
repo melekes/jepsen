@@ -15,8 +15,8 @@
     :parse-fn keyword]
    [nil "--dup-validators" "Whether to have multiple validators share the same key."]
    [nil "--super-byzantine-validators" "Should byzantine validators have just shy of 2/3 the voting weight?"]
-   (jc/package-opt "tendermint-url" "https://github.com/tendermint/tendermint/releases/download/v0.10.3/tendermint_0.10.3_linux_amd64.zip")
-   (jc/package-opt "merkleeyes-url" "https://github.com/melekes/katas/releases/download/v0.0.1/merkleeyes.zip")])
+   (jc/package-opt "tendermint-url" "https://github.com/tendermint/tendermint/releases/download/v0.34.0/Tendermint_0.34.0_linux_amd64.tar.gz")
+   (jc/package-opt "merkleeyes-url" "https://github.com/melekes/katas/releases/download/0.2.0/merkleeyes_0.1.0.tar.gz")])
 
 (defn -main
   [& args]

@@ -57,10 +57,10 @@
   String)
 
 (t/defalias Key
-  "A key is a map with :type and :data. Tendermint uses this to represent
+  "A key is a map with :type and :value. Tendermint uses this to represent
   public and private keys in validators"
   (HMap :mandatory {:type String
-                    :data ShortKey}
+                    :value ShortKey}
         :complete? true))
 
 (t/defalias GenValidator
@@ -215,7 +215,7 @@
   [x]
   (let [m (conform-map x)]
     {:type (conform-string (:type m))
-     :data (conform-string (:data m))}))
+     :value (conform-string (:value m))}))
 
 (t/ann conform-gen-validator [t/Any -> GenValidator])
 (defn conform-gen-validator
@@ -344,8 +344,10 @@
   []
   (conform-gen-validator
    (c/cd base-dir
-         (-> (c/exec "./tendermint" :--home base-dir :gen_validator)
-             (json/parse-string true)))))
+         (-> (c/exec "./tendermint/Tendermint" :--home base-dir :gen_validator)
+             (json/parse-string true)
+             (get :Key)
+             ))))
 
 (t/ann augment-gen-validator [GenValidator -> Validator])
 (defn augment-gen-validator
@@ -367,9 +369,9 @@
 
       {:address
        :pub_key {:type ...
-                 :data ...}
+                 :value ...}
        :priv_key {:type ...
-                  :data ...}
+                  :value ...}
        :votes    an-int}
 
   And the second is a map of nodes to the validator key they're running:
@@ -448,7 +450,7 @@
                                               first)
                                     _ (assert name)
                                     name (key name)]
-                                {:amount  (:votes validator)
+                                {:power  (:votes validator)
                                  :name    name
                                  :pub_key pub-key}))))})
 
@@ -471,7 +473,7 @@
 (defn compact-key
   "A compact, lossy, human-friendly representation of a validator key."
   [k]
-  (subs (:data k) 0 5))
+  (subs (:value k) 0 5))
 
 (t/ann compact-config [Config -> (HMap)])
 (defn compact-config
@@ -808,24 +810,24 @@
        [Config ShortKey -> (t/Option Validator)])
 (defn prospective-validator-by-short-key
   "Looks up a prospective validator by key data alone; e.g. instead of by
-  {:type ...  :data ...}."
+  {:type ...  :value ...}."
   [config pub-key-data]
   (t/loop [validators :- (t/Option (t/NonEmptyASeq Validator))
            (seq (vals (:prospective-validators config)))]
     (when validators
-      (if (= pub-key-data (:data (:pub_key (first validators))))
+      (if (= pub-key-data (:value (:pub_key (first validators))))
         (first validators)
         (recur (next validators))))))
 
 (t/ann validator-by-short-key [Config ShortKey -> (t/Option Validator)])
 (defn validator-by-short-key
-  "Looks up a validator by key data alone; e.g. instead of by {:type ... :data
+  "Looks up a validator by key data alone; e.g. instead of by {:type ... :value
   ...}."
   [config pub-key-data]
   (t/loop [validators :- (t/Option (t/NonEmptyASeq Validator))
            (seq (vals (:validators config)))]
     (when validators
-      (if (= pub-key-data (:data (:pub_key (first validators))))
+      (if (= pub-key-data (:value (:pub_key (first validators))))
         (first validators)
         (recur (next validators))))))
 

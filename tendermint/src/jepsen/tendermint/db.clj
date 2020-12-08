@@ -31,7 +31,7 @@
   (c/su
    (c/cd base-dir
          (c/exec :echo (json/generate-string validator)
-                 :> "priv_validator_key.json")
+                 :> "config/priv_validator_key.json")
          (info "Wrote priv_validator_key.json"))))
 
 (defn write-genesis!
@@ -40,7 +40,7 @@
   (c/su
    (c/cd base-dir
          (c/exec :echo (json/generate-string genesis)
-                 :> "genesis.json")
+                 :> "config/genesis.json")
          (info "Wrote genesis.json"))))
 
 (defn write-config!
@@ -49,7 +49,7 @@
   (c/su
    (c/cd base-dir
          (c/exec :echo (slurp (io/resource "config.toml"))
-                 :> "config.toml"))))
+                 :> "config/config.toml"))))
 
 (defn seeds
   "Constructs a --seeds command line for a test, so a tendermint node knows
@@ -79,7 +79,7 @@
           {:logfile tendermint-logfile
            :pidfile tendermint-pidfile
            :chdir   base-dir}
-          "./tendermint"
+          "./tendermint/Tendermint"
           :--home base-dir
           :node
           :--proxy_app socket
@@ -95,10 +95,9 @@
           {:logfile merkleeyes-logfile
            :pidfile merkleeyes-pidfile
            :chdir   base-dir}
-          "./merkleeyes"
-          :start
-          :--dbName   "jepsen"
-          :--address  socket)))
+          "./merkleeyes/merkleeyes"
+          :-laddr   socket
+          :-dbdir   "jepsen")))
   :started)
 
 (defn stop-tendermint! [test node]
@@ -123,10 +122,9 @@
 (def node-files
   "Files required for a validator's state."
   (map (partial str base-dir "/")
-       ["data"
-        "jepsen"
-        "priv_validator.json"
-        "priv_validator.json.bak"]))
+       ["config"
+        "data"
+        "jepsen"]))
 
 (defn reset-node!
   "Wipe data files and identity but preserve binaries."
@@ -148,6 +146,7 @@
        (install-component! "tendermint"  opts)
        (install-component! "merkleeyes"  opts)
 
+       (c/exec :mkdir (str base-dir "/config"))
        (write-config!)
 
         ; OK we're ready to compute the initial validator config.
@@ -184,5 +183,6 @@
     (log-files [_ test node]
       [tendermint-logfile
        merkleeyes-logfile
-       (str base-dir "/priv_validator.json")
-       (str base-dir "/genesis.json")])))
+       (str base-dir "/config/priv_validator_key.json")
+       (str base-dir "/data/priv_validator_key.json")
+       (str base-dir "/config/genesis.json")])))
