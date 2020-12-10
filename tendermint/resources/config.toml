@@ -4,7 +4,7 @@
 moniker = "anonymous"
 fast_sync = true
 db_backend = "goleveldb"
-log_level = "main:info,state:info,statesync:info,consensus:debug,*:error"
+log_level = "main:info,state:info,*:error"
 
 [rpc]
 laddr = "tcp://0.0.0.0:26657"
