@@ -37,6 +37,15 @@
                  :> "data/priv_validator_state.json")
          (info "Wrote priv_validator_key.json"))))
 
+(defn write-node-key!
+  "Writes out the given node key structure to node_key.json."
+  [node-key]
+  (c/su
+   (c/cd base-dir
+         (c/exec :echo (json/generate-string node-key)
+                 :> "config/node_key.json")
+         (info "Wrote node_key.json"))))
+
 (defn write-genesis!
   "Writes a genesis structure to a JSON file on disk."
   [genesis]
@@ -54,13 +63,23 @@
          (c/exec :echo (slurp (io/resource "config.toml"))
                  :> "config/config.toml"))))
 
+(defn node-id
+  "Extracts a node ID from node-keys field of test for a given node"
+  [test node]
+  (info @(:validator-config test))
+  (-> @(:validator-config test)
+      (:node-keys test)
+      (get node)
+      (:id))
+  )
+
 (defn persistent-peers
   "Constructs a --persistent_peers command line for a test, so a tendermint node knows
   what other nodes to talk to."
   [test node]
   (->> (:nodes test)
        (remove #{node})
-       (map (fn [node] (str node ":26656")))
+       (map (fn [node] (str (node-id test node) "@" node ":26656")))
        (str/join ",")))
 
 (def socket-file (str base-dir "/merkleeyes.sock"))
@@ -82,7 +101,7 @@
           {:logfile tendermint-logfile
            :pidfile tendermint-pidfile
            :chdir   base-dir}
-          "./tendermint/Tendermint"
+          "./tendermint"
           :--home base-dir
           :node
           :--proxy_app socket
@@ -167,7 +186,8 @@
        (let [vc @(:validator-config opts)]
          (write-genesis! (tv/genesis vc))
          (write-validator! (get (:validators vc)
-                                (get-in vc [:nodes node]))))
+                                (get-in vc [:nodes node])))
+         (write-node-key! (get (:node-keys vc) node)))
 
        (start-merkleeyes! test node)
        (start-tendermint! test node)
@@ -187,5 +207,6 @@
       [tendermint-logfile
        merkleeyes-logfile
        (str base-dir "/config/priv_validator_key.json")
+       (str base-dir "/config/node_key.json")
        (str base-dir "/data/priv_validator_key.json")
        (str base-dir "/config/genesis.json")])))
