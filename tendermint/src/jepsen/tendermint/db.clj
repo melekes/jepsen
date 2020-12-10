@@ -66,7 +66,6 @@
 (defn node-id
   "Extracts a node ID from node-keys field of test for a given node"
   [test node]
-  (info @(:validator-config test))
   (-> @(:validator-config test)
       (:node-keys test)
       (get node)

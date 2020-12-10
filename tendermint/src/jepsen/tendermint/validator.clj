@@ -470,7 +470,7 @@
   [config]
   {:app_hash      ""
    :chain_id      "jepsen"
-   :genesis_time  "0001-01-01T00:00:00.000Z"
+   :genesis_time  "2020-12-09T12:11:22.481331Z"
    :validators    (->> (:validators config)
                        vals
                        (map (t/fn [validator :- Validator]
