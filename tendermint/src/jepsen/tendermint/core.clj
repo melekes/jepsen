@@ -354,13 +354,11 @@
 
       {:generator a generator of client ops
        :client    a client to execute those ops
-       :model     a model to validate the history
        :checker   a map of checker names to checkers to run}."
   [test]
   (let [n (count (:nodes test))]
     (case (:workload test)
       :cas-register {:client    (CasRegisterClient. nil)
-                     :model     (model/cas-register)
                      :generator (independent/concurrent-generator
                                  n
                                  (range)
@@ -376,7 +374,6 @@
       :set
       (let [keys (atom [])]
         {:client (SetClient. nil)
-         :model  nil
          :generator (independent/concurrent-generator
                      n
                      (range)
@@ -434,6 +431,5 @@
                                      (gen/clients
                                       (:final-generator workload)))
                         :nemesis    (:nemesis nemesis)
-                        :model      (:model workload)
                         :checker    checker})]
     test))
