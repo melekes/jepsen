@@ -52,8 +52,8 @@
   [tx]
   (case (:code tx)
     0   tx
-    4   (throw+ {:type :unauthorized :log (:log tx)})
-    111 (throw+ {:type :base-unknown-address, :log (:log tx)})
+    7   (throw+ {:type :base-unknown-address, :log (:log tx)})
+    8   (throw+ {:type :unauthorized :log (:log tx)})
     (throw+ (assoc tx :type :unknown-tx-error))))
 
 (def port "HTTP interface port" 26657)
