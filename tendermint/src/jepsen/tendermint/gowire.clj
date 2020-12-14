@@ -1,6 +1,5 @@
 (ns jepsen.tendermint.gowire
-  "A verrrrry minimal implementation of Tendermint's custom serialization
-  format: https://github.com/tendermint/go-wire"
+  "A verrrrry minimal implementation of Tendermint's custom serialization format"
   (:import (java.nio ByteBuffer)))
 
 (defprotocol Writable
@@ -31,9 +30,7 @@
 (defrecord FixedBytes [^ByteBuffer x]
   Writable
   (byte-size [_] (.remaining x))
-  (write! [_ buf]
-    (.put buf x)
-    buf))
+  (write! [_ buf] (.put buf x) buf))
 
 (defn fixed-bytes
   [x]
@@ -68,7 +65,7 @@
 
   (write! [n buf]
     (let [int-size (dec (byte-size n))]
-      (.put buf (unchecked-byte int-size)) ; Write size byte
+      ; (.put buf (unchecked-byte int-size)) ; Write size byte
       (condp = int-size
         0  nil
         1 (.put       buf (unchecked-byte n))

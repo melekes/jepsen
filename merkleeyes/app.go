@@ -255,12 +255,12 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 	// 2) Execute tx based on type
 	switch typeByte {
 	case TxTypeSet:
-		key, errResp := unmarshalBytes(tx, "key", false)
+		key, errResp, n := unmarshalBytes(tx, "key", false)
 		if key == nil {
 			return errResp
 		}
 
-		value, errResp := unmarshalBytes(tx[prefixedLen(key):], "value", true)
+		value, errResp, _ := unmarshalBytes(tx[n:], "value", true)
 		if value == nil {
 			return errResp
 		}
@@ -271,7 +271,7 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
 
 	case TxTypeRm:
-		key, errResp := unmarshalBytes(tx, "key", true)
+		key, errResp, _ := unmarshalBytes(tx, "key", true)
 		if key == nil {
 			return errResp
 		}
@@ -288,7 +288,7 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
 
 	case TxTypeGet:
-		key, errResp := unmarshalBytes(tx, "key", true)
+		key, errResp, _ := unmarshalBytes(tx, "key", true)
 		if key == nil {
 			return errResp
 		}
@@ -304,17 +304,17 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK, Data: value}
 
 	case TxTypeCompareAndSet:
-		key, errResp := unmarshalBytes(tx, "key", false)
+		key, errResp, n := unmarshalBytes(tx, "key", false)
 		if key == nil {
 			return errResp
 		}
 
-		compareValue, errResp := unmarshalBytes(tx[prefixedLen(key):], "compareKey", false)
+		compareValue, errResp, n2 := unmarshalBytes(tx[n:], "compareKey", false)
 		if compareValue == nil {
 			return errResp
 		}
 
-		setValue, errResp := unmarshalBytes(tx[prefixedLen(key)+prefixedLen(compareValue):], "setValue", true)
+		setValue, errResp, _ := unmarshalBytes(tx[n+n2:], "setValue", true)
 		if setValue == nil {
 			return errResp
 		}
@@ -340,7 +340,7 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
 
 	case TxTypeValSetChange:
-		pubKey, errResp := unmarshalBytes(tx, "pubKey", false)
+		pubKey, errResp, n := unmarshalBytes(tx, "pubKey", false)
 		if pubKey == nil {
 			return errResp
 		}
@@ -352,7 +352,7 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 			}
 		}
 
-		tx = tx[prefixedLen(pubKey):]
+		tx = tx[n:]
 		power, err := decodeInt(tx)
 		if err != nil {
 			return abci.ResponseDeliverTx{
@@ -392,7 +392,7 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 
 		tx = tx[8:]
 
-		pubKey, errResp := unmarshalBytes(tx, "pubKey", false)
+		pubKey, errResp, n := unmarshalBytes(tx, "pubKey", false)
 		if pubKey == nil {
 			return errResp
 		}
@@ -403,7 +403,7 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 			}
 		}
 
-		tx = tx[prefixedLen(pubKey):]
+		tx = tx[n:]
 
 		power, err := decodeInt(tx)
 		if err != nil {
@@ -461,42 +461,44 @@ func (app *App) updateValidator(pubKey []byte, power int64) abci.ResponseDeliver
 	return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
 }
 
-func unmarshalBytes(buf []byte, key string, checkNoMoreBytes bool) ([]byte, abci.ResponseDeliverTx) {
-	if len(buf) < 8 {
+func unmarshalBytes(buf []byte, key string, checkNoMoreBytes bool) ([]byte, abci.ResponseDeliverTx, int) {
+	// decode length
+	length, n := decodeVarint(buf)
+	if n <= 0 {
 		return nil, abci.ResponseDeliverTx{
 			Code: CodeTypeEncodingError,
-			Log:  fmt.Sprintf("Not enough bytes %s: %d left, wanted %d", key, len(buf), 8),
-		}
+			Log:  fmt.Sprintf("Buf too small or value larger than 64bits %s: %d left, read %d", key, len(buf), n),
+		}, n
 	}
 
-	// decode length
-	l, _ := decodeInt(buf[:8])
-
-	if len(buf) < 8+l {
+	if length <= 0 {
 		return nil, abci.ResponseDeliverTx{
 			Code: CodeTypeEncodingError,
-			Log:  fmt.Sprintf("Not enough bytes %s: %d left, wanted %d", key, len(buf), 8+l),
-		}
+			Log:  fmt.Sprintf("Zero or negative length %s %d, read %d bytes", key, length, n),
+		}, n
+	}
+
+	if left, want := len(buf), n+length; left < want {
+		return nil, abci.ResponseDeliverTx{
+			Code: CodeTypeEncodingError,
+			Log:  fmt.Sprintf("Not enough bytes %s: %d left, wanted %d", key, left, want),
+		}, n
 	}
 
 	// unmarshal bytes
-	bytes := make([]byte, l)
-	copy(bytes, buf[8:(l+8)])
+	bytes := make([]byte, length)
+	copy(bytes, buf[n:(n+length)])
 
-	if checkNoMoreBytes && len(buf) > 8+l {
-		return nil, abci.ResponseDeliverTx{Code: CodeTypeEncodingError, Log: "Got bytes left over"}
+	if checkNoMoreBytes && len(buf) > n+length {
+		return nil, abci.ResponseDeliverTx{Code: CodeTypeEncodingError, Log: "Got bytes left over"}, n + length
 	}
 
-	return bytes, abci.ResponseDeliverTx{}
+	return bytes, abci.ResponseDeliverTx{}, n + length
 }
 
 // minimum length is 12 (nonce) + 1 (type byte) = 13
 func minTxLen() int {
 	return NonceLength + 1
-}
-
-func prefixedLen(b []byte) int {
-	return 8 + len(b)
 }
 
 // XXX: - possible overflow
@@ -506,4 +508,10 @@ func decodeInt(b []byte) (int, error) {
 		return -1, errors.New("not enough bytes")
 	}
 	return int(binary.BigEndian.Uint64(b)), nil
+}
+
+// XXX: - possible overflow
+func decodeVarint(b []byte) (int, int) {
+	v, n := binary.Uvarint(b)
+	return int(v), n
 }

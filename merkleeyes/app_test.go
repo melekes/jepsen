@@ -154,10 +154,10 @@ func valsetCasTx(version uint64, pubKey crypto.PubKey, power int64) []byte {
 
 func encodeBytes(b []byte) []byte {
 	// length prefix
-	lenBz := make([]byte, 8)
-	binary.BigEndian.PutUint64(lenBz, uint64(len(b)))
+	lenBz := make([]byte, binary.MaxVarintLen64)
+	n := binary.PutUvarint(lenBz, uint64(len(b)))
 
-	return append(lenBz, b...)
+	return append(lenBz[:n], b...)
 }
 
 func encodeUint64(i uint64) []byte {
