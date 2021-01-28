@@ -359,8 +359,9 @@
   (let [n (count (:nodes test))]
     (case (:workload test)
       :cas-register {:client    (CasRegisterClient. nil)
+                     :concurrency (* 2 n)
                      :generator (independent/concurrent-generator
-                                 n
+                                 (* 2 n)
                                  (range)
                                  (fn [k]
                                    (->> (gen/mix [w cas])
@@ -375,7 +376,7 @@
       (let [keys (atom [])]
         {:client (SetClient. nil)
          :generator (independent/concurrent-generator
-                     n
+                     (* 2 n)
                      (range)
                      (fn [k]
                        (swap! keys conj k)
@@ -392,7 +393,7 @@
                            (delay
                             (locking keys
                               (independent/concurrent-generator
-                               n
+                               (* 2 n)
                                @keys
                                (fn [k]
                                  (gen/each-thread (gen/once {:type :invoke

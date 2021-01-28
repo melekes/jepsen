@@ -5,6 +5,7 @@
             [clojure.data.fressian :as f]
             [clj-http.client :as http]
             [cheshire.core :as json]
+            [clojure.data.codec.base64 :as b64]
             [clojure.tools.logging :refer [info warn]]
             [jepsen.util :refer [map-vals]]
             [slingshot.slingshot :refer [throw+]]
@@ -36,6 +37,14 @@
                                    (subs s (* i 2) (+ (* i 2) 2)) 16)))
         (recur (inc i))))
     (ByteBuffer/wrap a)))
+
+(defn base64->byte-buf
+  "Convert a base64 string to a byte buffer"
+  [^String s]
+  (-> s
+      .getBytes
+      b64/decode
+      ByteBuffer/wrap))
 
 (defn encode-query-param
   "Encodes a string or bytebuffer for use as a URL parameter. Converts strings
@@ -134,7 +143,7 @@
   (-> (broadcast-tx! node (tx :get (f/write k)))
       :deliver_tx
       :data
-      hex->byte-buf
+      base64->byte-buf
       f/read))
 
 (defn cas!
@@ -148,7 +157,7 @@
   (-> (broadcast-tx! node (tx :validator-set-read))
       :deliver_tx
       :data
-      hex->byte-buf
+      base64->byte-buf
       (bs/convert java.io.Reader)
       (json/parse-stream true)))
 
@@ -179,7 +188,7 @@
                 :value)]
     (if (= res "")
       nil
-      (f/read (hex->byte-buf res)))))
+      (f/read (base64->byte-buf res)))))
 
 (defn with-any-node
   "Takes a test, a function taking a node as its first argument, and remaining
