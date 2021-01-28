@@ -58,6 +58,10 @@ func TestMerkleEyesApp(t *testing.T) {
 	// set
 	res7 := app.DeliverTx(abci.RequestDeliverTx{Tx: setTx([]byte("foo"), []byte("bar"))})
 	assert.Equal(t, abci.CodeTypeOK, res7.Code, res7.Log)
+	// get existing key
+	res66 := app.DeliverTx(abci.RequestDeliverTx{Tx: readTx([]byte("foo"))})
+	assert.EqualValues(t, abci.CodeTypeOK, res66.Code, res6.Log)
+	assert.EqualValues(t, []byte("bar"), res66.Data, res6.Log)
 	// rm
 	res8 := app.DeliverTx(abci.RequestDeliverTx{Tx: rmTx([]byte("baz"))})
 	assert.EqualValues(t, merkleeyes.CodeTypeErrBaseUnknownAddress, res8.Code, res8.Log)
