@@ -330,12 +330,12 @@
     :truncate-merkleeyes {:nemesis (crash-truncate-nemesis
                                     test 1/3 "/jepsen/jepsen.db/000001.log")
                           :generator (->> {:type :info, :f :crash}
-                                          (gen/delay 10))}
+                                          (gen/delay 1))}
 
     :truncate-tendermint {:nemesis (crash-truncate-nemesis
                                     test 1/3 "/data/cs.wal/wal")
                           :generator (->> {:type :info, :f :crash}
-                                          (gen/delay 10))}
+                                          (gen/delay 1))}
 
     :none       {:nemesis   nemesis/noop}))
 
