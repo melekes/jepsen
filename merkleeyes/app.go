@@ -265,16 +265,7 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 			return errResp
 		}
 
-		if ok := tree.Set(storeKey(key), value); !ok {
-			app.logger.Info("SET -> FAILED",
-				"key", fmt.Sprintf("%X", key),
-				"value", fmt.Sprintf("%X", value),
-			)
-			return abci.ResponseDeliverTx{
-				Code: CodeTypeInternalError,
-				Log:  "tree.Set error",
-			}
-		}
+		_ = tree.Set(storeKey(key), value)
 
 		app.logger.Info("SET", "key", fmt.Sprintf("%X", key), "value", fmt.Sprintf("%X", value))
 		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
@@ -351,16 +342,7 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 			}
 		}
 
-		if ok := tree.Set(storeKey(key), setValue); !ok {
-			app.logger.Info("CAS -> FAILED",
-				"key", fmt.Sprintf("%X", key),
-				"value", fmt.Sprintf("%X", setValue),
-			)
-			return abci.ResponseDeliverTx{
-				Code: CodeTypeInternalError,
-				Log:  "tree.Set error",
-			}
-		}
+		_ = tree.Set(storeKey(key), setValue)
 
 		app.logger.Info("CAS-SET",
 			"key", fmt.Sprintf("%X", key),
