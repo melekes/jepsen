@@ -16,7 +16,7 @@
    [nil "--dup-validators" "Whether to have multiple validators share the same key."]
    [nil "--super-byzantine-validators" "Should byzantine validators have just shy of 2/3 the voting weight?"]
    (jc/package-opt "tendermint-url" "https://github.com/melekes/katas/releases/download/0.2.0/tendermint.tar.gz")
-   (jc/package-opt "merkleeyes-url" "https://github.com/melekes/katas/releases/download/0.2.0/merkleeyes_0.1.6.tar.gz")])
+   (jc/package-opt "merkleeyes-url" "https://github.com/melekes/katas/releases/download/0.2.0/merkleeyes_0.1.7.tar.gz")])
 
 (defn -main
   [& args]

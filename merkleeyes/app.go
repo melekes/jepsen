@@ -17,7 +17,7 @@ import (
 
 const (
 	// Version is the semantic version of this package.
-	Version = "0.1.0"
+	Version = "0.1.7"
 
 	// Transaction type bytes
 	TxTypeSet           byte = 0x01
