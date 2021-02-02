@@ -266,13 +266,17 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 		}
 
 		if ok := tree.Set(storeKey(key), value); !ok {
+			app.logger.Info("SET -> FAILED",
+				"key", fmt.Sprintf("%X", key),
+				"value", fmt.Sprintf("%X", value),
+			)
 			return abci.ResponseDeliverTx{
 				Code: CodeTypeInternalError,
 				Log:  "tree.Set error",
 			}
 		}
 
-		app.logger.Info("SET", fmt.Sprintf("%X", key), fmt.Sprintf("%X", value))
+		app.logger.Info("SET", "key", fmt.Sprintf("%X", key), "value", fmt.Sprintf("%X", value))
 		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
 
 	case TxTypeRm:
@@ -283,13 +287,14 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 
 		_, removed := tree.Remove(storeKey(key))
 		if !removed {
+			app.logger.Info("RM -> FAILED", "key", fmt.Sprintf("%X", key))
 			return abci.ResponseDeliverTx{
 				Code: CodeTypeErrBaseUnknownAddress,
 				Log:  fmt.Sprintf("Failed to remove %X", key),
 			}
 		}
 
-		app.logger.Info("RM", fmt.Sprintf("%X", key))
+		app.logger.Info("RM", "key", fmt.Sprintf("%X", key))
 		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
 
 	case TxTypeGet:
@@ -300,12 +305,13 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 
 		_, value := tree.Get(storeKey(key))
 		if value == nil {
+			app.logger.Info("GET -> NOT FOUND", "key", fmt.Sprintf("%X", key))
 			return abci.ResponseDeliverTx{
 				Code: CodeTypeErrBaseUnknownAddress,
 				Log:  fmt.Sprintf("Cannot find key: %X", key)}
 		}
 
-		app.logger.Info("GET", fmt.Sprintf("%X", key), fmt.Sprintf("%X", value))
+		app.logger.Info("GET", "key", fmt.Sprintf("%X", key), "value", fmt.Sprintf("%X", value))
 		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK, Data: value}
 
 	case TxTypeCompareAndSet:
@@ -326,6 +332,7 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 
 		_, value := tree.Get(storeKey(key))
 		if value == nil {
+			app.logger.Info("CAS -> NOT FOUND", "key", fmt.Sprintf("%X", key))
 			return abci.ResponseDeliverTx{
 				Code: CodeTypeErrBaseUnknownAddress,
 				Log:  fmt.Sprintf("Cannot find key: %X", key),
@@ -333,6 +340,11 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 		}
 
 		if !bytes.Equal(value, compareValue) {
+			app.logger.Info("CAS-REJECTED",
+				"key", fmt.Sprintf("%X", key),
+				"compare", fmt.Sprintf("%X", compareValue),
+				"actual-value", fmt.Sprintf("%X", value),
+			)
 			return abci.ResponseDeliverTx{
 				Code: CodeTypeErrUnauthorized,
 				Log:  fmt.Sprintf("Value was %X, not %X", value, compareValue),
@@ -340,13 +352,21 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 		}
 
 		if ok := tree.Set(storeKey(key), setValue); !ok {
+			app.logger.Info("CAS -> FAILED",
+				"key", fmt.Sprintf("%X", key),
+				"value", fmt.Sprintf("%X", setValue),
+			)
 			return abci.ResponseDeliverTx{
 				Code: CodeTypeInternalError,
 				Log:  "tree.Set error",
 			}
 		}
 
-		app.logger.Info("CAS-SET", fmt.Sprintf("%X", key), fmt.Sprintf("%X", compareValue), fmt.Sprintf("%X", setValue))
+		app.logger.Info("CAS-SET",
+			"key", fmt.Sprintf("%X", key),
+			"compare", fmt.Sprintf("%X", compareValue),
+			"set-value", fmt.Sprintf("%X", setValue),
+		)
 		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK}
 
 	case TxTypeValSetChange:
@@ -370,6 +390,11 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 				Log:  fmt.Sprintf("Can't decode power: %v", err),
 			}
 		}
+
+		app.logger.Info("VALSET-CHANGE",
+			"pubkey", fmt.Sprintf("%X", pubKey),
+			"power", power,
+		)
 
 		return app.updateValidator(pubKey, int64(power))
 
@@ -422,6 +447,11 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 				Log:  fmt.Sprintf("Can't decode power: %v", err),
 			}
 		}
+
+		app.logger.Info("VALSET-CAS",
+			"pubkey", fmt.Sprintf("%X", pubKey),
+			"power", power,
+		)
 
 		return app.updateValidator(pubKey, int64(power))
 
