@@ -289,7 +289,7 @@
   [test]
   (case (:nemesis test)
     :changing-validators {:nemesis   (changing-validators-nemesis)
-                          :generator (gen/stagger 10 (tv/generator))}
+                          :generator (gen/stagger 1 (tv/generator))}
 
     :peekaboo-dup-validators {:nemesis (nemesis/partitioner
                                         (peekaboo-dup-validators-grudge test))
@@ -320,7 +320,7 @@
                                        {:type :info, :f :stop}])}
 
     :clocks     {:nemesis   (nt/clock-nemesis)
-                 :generator (gen/stagger 5 (nt/clock-gen))}
+                 :generator (gen/stagger 1/2 (nt/clock-gen))}
 
     :crash      {:nemesis (crash-nemesis)
                  :generator (seq [(gen/sleep 15)
@@ -366,7 +366,7 @@
                                  (fn [k]
                                    (->> (gen/mix [w cas])
                                         (gen/reserve n r)
-                                        (gen/stagger 1)
+                                        (gen/stagger 1/10)
                                         (gen/limit 120))))
                      :final-generator nil
                      :checker {:linear (independent/checker
