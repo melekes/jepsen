@@ -180,8 +180,8 @@
            nemesis/complete-grudge))))
 
 (defrecord CrashTruncateNemesis [test file faulty-nodes]
-   client/Client
-    ; (setup! [this test _] this)
+   nemesis/Nemesis
+    (setup! [this test] this)
 
     (invoke! [this test op]
              (info :nemesis-got op)
@@ -222,8 +222,8 @@
   (nemesis/node-start-stopper identity td/stop! td/start!))
 
 (defrecord ChangingValidatorsNemesis []
-  client/Client
-  ; (setup! [this test _] this)
+  nemesis/Nemesis
+  (setup! [this test] this)
 
   (invoke! [this test op]
            (if (= :stop (:f op))
@@ -274,7 +274,7 @@
 
            (assoc op :value :done))
 
-  (teardown! [this test])
+  (teardown! [this test] this)
   )
 
 (defn changing-validators-nemesis
