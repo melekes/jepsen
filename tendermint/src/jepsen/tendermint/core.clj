@@ -339,16 +339,6 @@
 
     :none       {:nemesis   nemesis/noop}))
 
-(defn deref-gen
-  "Sometimes you need to build a generator not *now*, but *later*; e.g. because
-  it depends on state that won't be available until the generator is actually
-  invoked. Wrap a derefable returning a generator in this, and it'll be deref'ed
-  only when asked for ops."
-  [dgen]
-  (reify gen/Generator
-    (op [this test process]
-      (gen/op @dgen test process))))
-
 (defn workload
   "Given a test map, computes
 
@@ -387,17 +377,15 @@
                                     {:type :invoke
                                      :f    :add
                                      :value x}))
-                             ; gen.seq
                              (gen/stagger 1/2)))))
-         :final-generator (deref-gen
-                           (delay
+         :final-generator (delay
                             (locking keys
                               (independent/concurrent-generator
-                               (* 2 n)
-                               @keys
-                               (fn [k]
-                                 (gen/each-thread (gen/once {:type :invoke
-                                                             :f :read})))))))
+                                (* 2 n)
+                                @keys
+                                (fn [k]
+                                  (gen/each-thread (gen/once {:type :invoke
+                                                              :f :read}))))))
          :checker {:set (independent/checker (checker/set))}}))))
 
 (defn test
