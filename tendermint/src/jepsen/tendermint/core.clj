@@ -363,29 +363,26 @@
                                          (checker/linearizable {:model (model/cas-register)
                                                                 :algorithm :linear}))}}
       :set
-      (let [keys (atom [])]
+      (let [max-key (atom 0)]
         {:client (SetClient. nil)
          :generator (independent/concurrent-generator
                      (* 2 n)
                      (range)
                      (fn [k]
-                       (swap! keys conj k)
+                       (swap! max-key max k)
                        (gen/phases
-                        (gen/once {:type :invoke, :f :init})
+                        (gen/once {:f :init})
                         (->> (range)
                              (map (fn [x]
-                                    {:type :invoke
-                                     :f    :add
+                                    {:f    :add
                                      :value x}))
                              (gen/stagger 1/2)))))
          :final-generator (delay
-                            (locking keys
-                              (independent/concurrent-generator
-                                (* 2 n)
-                                @keys
-                                (fn [k]
-                                  (gen/each-thread (gen/once {:type :invoke
-                                                              :f :read}))))))
+                            (independent/concurrent-generator
+                              (* 2 n)
+                              (range @max-key)
+                              (fn [k]
+                                (gen/once {:f :read}))))
          :checker {:set (independent/checker (checker/set))}}))))
 
 (defn test
