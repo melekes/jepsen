@@ -960,16 +960,15 @@
 
   (defrecord Generator []
     gen/Generator
-    (op [_ test ctx]
+    (op [this test ctx]
       (try
         (info "refreshing config")
         (let [config (refresh-config! test)]
           (info :config-refreshed)
           (info (with-out-str (pprint config)))
           (info (with-out-str (pprint (compact-config config))))
-          {:type  :info
-           :f     :transition
-           :value (rand-legal-transition test config)})
+          [{:f     :transition
+            :value (rand-legal-transition test config)} this])
         (catch Exception e
           (warn e "error generating transition")
           (throw e))))
@@ -981,4 +980,4 @@
     []
     (jepsen.tendermint.validator.Generator.))
 
-  )
+)
