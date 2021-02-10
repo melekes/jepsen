@@ -962,16 +962,18 @@
     gen/Generator
     (op [this test ctx]
       (try
-        (info "refreshing config")
-        (let [config (refresh-config! test)]
-          (info :config-refreshed)
-          (info (with-out-str (pprint config)))
-          (info (with-out-str (pprint (compact-config config))))
-          [{:f     :transition
-            :value (rand-legal-transition test config)} this])
-        (catch Exception e
-          (warn e "error generating transition")
-          (throw e))))
+       (info "refreshing config")
+       (let [config (refresh-config! test)]
+         (info :config-refreshed)
+         (info (with-out-str (pprint config)))
+         (info (with-out-str (pprint (compact-config config))))
+         (let [op {:type  :info
+                   :f     :transition
+                   :value (rand-legal-transition test config)}]
+           [(gen/fill-in-op op ctx) this]))
+       (catch Exception e
+         (warn e "error generating transition")
+         (throw e))))
     (update [this test ctx event]
       this))
 
