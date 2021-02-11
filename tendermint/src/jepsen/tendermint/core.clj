@@ -365,6 +365,7 @@
       :set
       (let [max-key (atom 0)]
         {:client (SetClient. nil)
+         :concurrency (* 2 n)
          :generator (independent/concurrent-generator
                      (* 2 n)
                      (range)
@@ -407,6 +408,7 @@
         test    (merge test
                        {:db         db
                         :client     (:client workload)
+                        :concurrency     (:concurrency workload)
                         :generator  (gen/phases
                                      (->> (:generator workload)
                                           (gen/nemesis (:generator nemesis))

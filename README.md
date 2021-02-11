@@ -30,7 +30,7 @@ cd docker && bin/console
 Once console is up, run:
 
 ```
-root@control:/jepsen# cd tendermint && lein run test --concurrency 10
+root@control:/jepsen# cd tendermint && lein run test
 ```
 
 The output should look something like this:
