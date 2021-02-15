@@ -162,19 +162,19 @@
       (json/parse-stream true)))
 
 (defn validator-set-change!
-  "Change the weight of a validator, given by private key (a hex string), and a
+  "Change the power of a validator, given by private key (a hex string), and a
   voting power, an integer."
-  [node validator-key weight]
+  [node validator-key power]
   (-> (broadcast-tx! node (tx :validator-set-change
-                              (hex->byte-buf validator-key)
-                              (w/uint64 weight)))))
+                              (base64->byte-buf validator-key)
+                              (w/uint64 power)))))
 
 (defn validator-set-cas!
-  "Change the weight of a validator, iff the current version is as given."
+  "Change the power of a validator, iff the current version is as given."
   [node version validator-key power]
   (-> (broadcast-tx! node (tx :validator-set-cas
                               (w/uint64 version)
-                              (hex->byte-buf validator-key)
+                              (base64->byte-buf validator-key)
                               (w/uint64 power)))))
 
 (defn local-read

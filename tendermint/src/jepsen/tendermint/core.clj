@@ -239,21 +239,21 @@
                      (tc/with-any-node test
                        tc/validator-set-cas!
                        (:version t)
-                       (:data (:pub_key (:validator t)))
+                       (:value (:pub_key (:validator t)))
                        (:votes (:validator t)))
 
                      :remove
                      (tc/with-any-node test
                        tc/validator-set-cas!
                        (:version t)
-                       (:data (:pub_key t))
+                       (:value (:pub_key t))
                        0)
 
                      :alter-votes
                      (tc/with-any-node test
                        tc/validator-set-cas!
                        (:version t)
-                       (:data (:pub_key t))
+                       (:value (:pub_key t))
                        (:votes t))
 
                      :create

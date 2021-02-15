@@ -461,9 +461,7 @@ func (app *App) updateValidator(pubKey []byte, power int64) abci.ResponseDeliver
 		app.state.Validators.Set(v)
 	}
 
-	var pubKeyEd ed25519.PubKey
-	copy(pubKeyEd[:], pubKey)
-	pk, err := cryptoenc.PubKeyToProto(pubKeyEd)
+	pk, err := cryptoenc.PubKeyToProto(v.PubKey)
 	if err != nil {
 		panic(err)
 	}
