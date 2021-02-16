@@ -388,7 +388,10 @@ func (app *App) doTx(tx []byte) abci.ResponseDeliverTx {
 				Log:  fmt.Sprintf("Marshaling error: %v", err),
 			}
 		}
-		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK, Data: bz, Log: string(bz)}
+
+		app.logger.Info("VALSET-READ", "version", app.state.Validators.Version)
+
+		return abci.ResponseDeliverTx{Code: abci.CodeTypeOK, Data: bz}
 
 	case TxTypeValSetCAS:
 		if len(tx) < 8 {

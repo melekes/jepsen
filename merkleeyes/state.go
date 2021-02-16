@@ -163,7 +163,7 @@ func (vss *ValidatorSetState) Has(v *Validator) bool {
 func (vss *ValidatorSetState) Remove(v *Validator) {
 	vals := make([]*Validator, 0, len(vss.Validators)-1)
 	for _, v1 := range vss.Validators {
-		if v1.PubKey.Equals(v.PubKey) {
+		if !v1.PubKey.Equals(v.PubKey) {
 			vals = append(vals, v1)
 		}
 	}
