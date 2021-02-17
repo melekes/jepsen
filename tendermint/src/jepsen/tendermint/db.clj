@@ -137,8 +137,8 @@
 
 (defn stop!
   [test node]
-  (stop-merkleeyes! test node)
-  (stop-tendermint! test node))
+  (stop-tendermint! test node)
+  (stop-merkleeyes! test node))
 
 (def node-files
   "Files required for a validator's state."
@@ -151,6 +151,14 @@
   "Wipe data files and identity but preserve binaries."
   [test node]
   (c/su (c/exec :rm :-rf node-files)))
+
+(defn reset-validator!
+  "Wipe data files and identity but preserve binaries and genesis."
+  [test node]
+  (c/su (c/exec :rm :-rf (map (partial str base-dir "/")
+       ["/config/!(genesis.json)"
+        "data"
+        "jepsen"]))))
 
 (defn db
   "A complete Tendermint system. Options:
@@ -196,8 +204,8 @@
        (Thread/sleep 1000)))
 
     (teardown! [_ test node]
-      (stop-merkleeyes! test node)
       (stop-tendermint! test node)
+      (stop-merkleeyes! test node)
       (c/su
        (c/exec :rm :-rf base-dir)))
 

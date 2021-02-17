@@ -115,7 +115,8 @@
   "Create an instance of a validator on a node"
   (t/HMap :mandatory {:type       (t/Val :create)
                       :node       Node
-                      :validator  Validator}
+                      :validator  Validator
+                      :node-key   NodeKey}
           :complete? true))
 
 (t/defalias DestroyTransition
@@ -709,18 +710,19 @@
    (case (:type transition)
       ; Create a new validator on a node
      :create (let [n (:node transition)
-                   v (:validator transition)]
+                   v (:validator transition)
+                   k (:node-key transition)]
                (assert (not (get-in config [:nodes n])))
-               (assoc config :nodes (assoc (:nodes config) n (:pub_key v))))
+               (assoc config :nodes (assoc (:nodes config) n (:pub_key v)))
+               (assoc config :node-keys (assoc (:node-keys config) n k)))
 
       ; Destroy a validator on a node
-     :destroy (assoc config :nodes (dissoc (:nodes config)
-                                           (:node transition)))
+      :destroy (let [n (:node transition)]
+                 (assoc config :nodes (dissoc (:nodes config) n))
+                 (assoc config :node-keys (dissoc (:node-keys config) n)))
 
 
       ; Add a validator to the validator set
-
-
      :add (let [v (:validator transition)]
             (assert (not (get-in config [:validators (:pub_key v)])))
             (-> config
@@ -780,11 +782,13 @@
   (or (condp <= (rand)
         ; Create a new instance of a validator on a node.
         4/5 (let [v (rand-validator config)
-                  n (rand-free-node config)]
+                  n (rand-free-node config)
+                  k (gen-node-key)]
               (when (and v n)
                 {:type      :create
                  :node      n
-                 :validator v}))
+                 :validator v
+                 :node-key k}))
 
         ;; Nuke a node
         3/5 (when-let [node (rand-taken-node config)]

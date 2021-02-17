@@ -266,7 +266,7 @@
                      (c/on-nodes test (list (:node t))
                                  (fn destroy [test node]
                                    (td/stop! test node)
-                                   (td/reset-node! test node))))
+                                   (td/reset-validator! test node))))
 
                    ; After we've executed an operation, we need to update our test
                    ; state to reflect the new state of things.
